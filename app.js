@@ -451,7 +451,7 @@ function renderDashboard() {
   const blockedSystems = DATA.systems.filter((s) => s.status === "blocked").length;
 
   document.getElementById("dashboard").innerHTML = `
-    <h1>Development Dashboard</h1>
+    <h1>Project Dashboard</h1>
     <p class="view-sub">${DATA.meta.tagline}</p>
 
     <button type="button" id="export-data-btn" class="bench-secondary-btn">Export data (backup)</button>
