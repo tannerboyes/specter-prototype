@@ -1,4 +1,4 @@
-const CACHE_NAME = "specter-cache-v7";
+const CACHE_NAME = "specter-cache-v9";
 const PRECACHE_URLS = [
   "./",
   "index.html",
