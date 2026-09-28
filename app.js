@@ -920,11 +920,17 @@ function allLogEntries() {
   return [...activityLog.filter(inActiveProject), ...staticEntries].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
-function logEntryHtml(entry, deletable) {
+// Build Log tab: every project's entries in one timeline, newest first.
+function allProjectsLogEntries() {
+  const staticEntries = DATA.log.map((e) => ({ ...e, projectId: e.projectId || DEFAULT_PROJECT_ID }));
+  return [...activityLog, ...staticEntries].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+}
+
+function logEntryHtml(entry, deletable, showProject) {
   return `
     <div class="log-entry">
       <div class="log-entry-head">
-        <div class="log-date">${escapeHtml(entry.date)}</div>
+        <div class="log-date">${escapeHtml(entry.date)}${showProject && projectNameFor(entry.projectId) ? ` &middot; <strong>${escapeHtml(projectNameFor(entry.projectId))}</strong>` : ""}</div>
         ${deletable && entry.id ? `<button type="button" class="bench-delete-item icon-trash-btn log-delete-btn" data-item="${entry.id}" aria-label="Delete log entry" title="Delete log entry">${trashIconHtml()}</button>` : ""}
       </div>
       <div class="log-title">${escapeHtml(entry.title)}</div>
@@ -947,8 +953,8 @@ function wireLogList() {
 function renderLog() {
   document.getElementById("log").innerHTML = `
     <h1>Build Log</h1>
-    <p class="view-sub">Dated journal of progress, decisions, and notes.</p>
-    ${allLogEntries().map((e) => logEntryHtml(e, true)).join("") || `<p class="view-sub">No entries yet.</p>`}
+    <p class="view-sub">Progress, decisions, and notes across all projects.</p>
+    ${allProjectsLogEntries().map((e) => logEntryHtml(e, true, true)).join("") || `<p class="view-sub">No entries yet.</p>`}
   `;
   wireLogList();
 }
