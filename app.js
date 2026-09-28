@@ -552,7 +552,7 @@ function taskFormHtml() {
         <label class="field-label" for="af-category">Category</label>
         <input type="text" id="af-category" placeholder="e.g. Interior" value="${editing ? escapeAttr(editing.category) : ""}" />
         <div class="bench-pills" id="task-category-pills">
-          ${BENCH_CATEGORIES.map((c) => `<button type="button" class="pill ${editing && editing.category === c ? "active" : ""}" data-cat="${escapeAttr(c)}">${escapeHtml(c)}</button>`).join("")}
+          ${TASK_CATEGORIES.map((c) => `<button type="button" class="pill ${editing && editing.category === c ? "active" : ""}" data-cat="${escapeAttr(c)}">${escapeHtml(c)}</button>`).join("")}
         </div>
 
         <label class="field-label" for="af-reason">What to check or decide, and why</label>
@@ -918,6 +918,14 @@ const BENCH_CATEGORIES = [
   "Glass", "Body & Trim", "Interior", "Audio", "Lighting", "Drivetrain",
   "Chassis & Exterior Steel", "Electrical", "Hardware", "Cage & Rack",
   "HVAC", "Wheels",
+];
+
+const TASK_CATEGORIES = [
+  "Transportation", "Body & Paint", "Metalwork", "Mechanical", "Interior",
+  "Wheels & Tires", "Electrical", "Lighting", "Hardware", "Glass", "Misc",
+  "Suspension", "Brakes",
+  "Docs", "Office", "Shopkeeping", "Shipping", "Process", "Research",
+  "Web", "Materials",
 ];
 
 let benchItems = [];
