@@ -504,6 +504,22 @@ let taskFormOpen = false;
 let taskLinkCounter = 0;
 let taskEditingId = null;
 let taskTechFilter = "";
+const UNASSIGNED = "__unassigned__";
+
+// Quick "Assign to…" dropdown on each open task card, so techs can be
+// assigned without opening the edit form or switching projects.
+function assignSelectHtml(item) {
+  if (item.done) return "";
+  const current = (item.technician || "").trim();
+  const custom = current && !TECHNICIANS.some((t) => t.toLowerCase() === current.toLowerCase()) ? [current] : [];
+  const names = [...TECHNICIANS, ...custom];
+  return `
+    <select class="assign-tech-select move-project-select" data-item="${escapeAttr(item.id)}" aria-label="Assign technician">
+      <option value="" ${current ? "" : "selected"}>${current ? "Unassign" : "Assign to&hellip;"}</option>
+      ${names.map((n) => `<option value="${escapeAttr(n)}" ${n.toLowerCase() === current.toLowerCase() ? "selected" : ""}>${escapeHtml(n)}</option>`).join("")}
+    </select>
+  `;
+}
 
 const TECHNICIANS = ["Tanner", "Angel", "Skyler", "Jason"];
 
@@ -761,6 +777,7 @@ function taskItemCardHtml(item) {
           : `<button type="button" class="action-btn bench-approve-btn" data-item="${item.id}">${checkIconHtml()} Mark done</button>`}
         ${commentActionBtnHtml(item)}
         <button type="button" class="action-btn action-btn-danger bench-delete-item" data-item="${item.id}">${trashIconHtml()} Delete</button>
+        ${assignSelectHtml(item)}
         ${moveSelectHtml(item)}
       </div>
       ${commentsSectionHtml(item)}
@@ -780,7 +797,17 @@ function wireTaskList() {
     });
   });
 
-  document.querySelectorAll("#tasks .move-project-select").forEach((select) => {
+  document.querySelectorAll("#tasks .assign-tech-select").forEach((select) => {
+    select.addEventListener("change", () => {
+      const item = taskItems.find((i) => i.id === select.dataset.item);
+      if (!item) return;
+      item.technician = select.value;
+      saveTaskItems();
+      renderTasks();
+    });
+  });
+
+  document.querySelectorAll("#tasks .move-project-select:not(.assign-tech-select)").forEach((select) => {
     select.addEventListener("change", () => {
       const item = taskItems.find((i) => i.id === select.dataset.item);
       if (!item || !select.value) return;
@@ -848,20 +875,23 @@ function renderTasks() {
       <p class="view-sub">Things to check, measure or decide at the shop — nothing to buy.</p>
       <button type="button" id="task-open" class="bench-primary-btn">+ Add task</button>
       <label class="field-label" for="task-tech-search">Find a technician's tasks (all projects)</label>
-      <input type="text" id="task-tech-search" placeholder="Type a name..." value="${escapeAttr(taskTechFilter)}" />
+      <input type="text" id="task-tech-search" placeholder="Type a name..." value="${taskTechFilter === UNASSIGNED ? "" : escapeAttr(taskTechFilter)}" />
       <div class="bench-pills" id="task-tech-filter">
         <button type="button" class="pill ${taskTechFilter ? "" : "active"}" data-tech="">This project</button>
         ${TECHNICIANS.map((t) => `<button type="button" class="pill ${taskTechFilter.toLowerCase() === t.toLowerCase() ? "active" : ""}" data-tech="${escapeAttr(t)}">${escapeHtml(t)}</button>`).join("")}
+        <button type="button" class="pill ${taskTechFilter === UNASSIGNED ? "active" : ""}" data-tech="${UNASSIGNED}">Unassigned</button>
       </div>
     `;
 
-  const shown = taskTechFilter
+  const shown = taskTechFilter === UNASSIGNED
+    ? taskItems.filter((i) => !i.done && !(i.technician || "").trim())
+    : taskTechFilter
     ? taskItems.filter((i) => (i.technician || "").toLowerCase().includes(taskTechFilter.toLowerCase()))
     : taskItems.filter(inActiveProject);
   const projectTasks = shown.sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1));
   const list = projectTasks.length
-    ? `${taskTechFilter ? `<p class="view-sub">Tasks assigned to ${escapeHtml(taskTechFilter)} across all projects &middot; ${projectTasks.filter((i) => !i.done).length} open</p>` : ""}<div class="bench-item-list">${projectTasks.map(taskItemCardHtml).join("")}</div>`
-    : `<p class="view-sub">${taskTechFilter ? `No tasks assigned to ${escapeHtml(taskTechFilter)}.` : "Nothing on the list right now."}</p>`;
+    ? `${taskTechFilter === UNASSIGNED ? `<p class="view-sub">${projectTasks.length} open task${projectTasks.length === 1 ? "" : "s"} with no technician, across all projects</p>` : taskTechFilter ? `<p class="view-sub">Tasks assigned to ${escapeHtml(taskTechFilter)} across all projects &middot; ${projectTasks.filter((i) => !i.done).length} open</p>` : ""}<div class="bench-item-list">${projectTasks.map(taskItemCardHtml).join("")}</div>`
+    : `<p class="view-sub">${taskTechFilter === UNASSIGNED ? "Every open task has a technician." : taskTechFilter ? `No tasks assigned to ${escapeHtml(taskTechFilter)}.` : "Nothing on the list right now."}</p>`;
 
   el.innerHTML = `${header}<div class="bench-list-wrap">${list}</div>`;
 
