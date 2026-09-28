@@ -503,6 +503,18 @@ let taskItems = [];
 let taskFormOpen = false;
 let taskLinkCounter = 0;
 let taskEditingId = null;
+let taskTechFilter = "";
+
+const TECHNICIANS = ["Tanner", "Angel", "Skyler", "Jason"];
+
+function techMatches(item, name) {
+  return (item.technician || "").trim().toLowerCase() === name.trim().toLowerCase();
+}
+
+function projectNameFor(id) {
+  const p = projects.find((x) => x.id === id);
+  return p ? p.name : "";
+}
 
 function loadTaskItems() {
   try {
@@ -558,8 +570,11 @@ function taskFormHtml() {
         <label class="field-label" for="af-reason">What to check or decide, and why</label>
         <textarea id="af-reason" rows="3" required>${editing ? escapeHtml(editing.reason) : ""}</textarea>
 
-        <label class="field-label" for="af-checkfirst">Check first (optional)</label>
-        <textarea id="af-checkfirst" rows="2">${editing ? escapeHtml(editing.checkFirst) : ""}</textarea>
+        <label class="field-label" for="af-technician">Technician (optional)</label>
+        <input type="text" id="af-technician" placeholder="Who's doing it?" value="${editing ? escapeAttr(editing.technician || "") : ""}" />
+        <div class="bench-pills" id="task-tech-pills">
+          ${TECHNICIANS.map((t) => `<button type="button" class="pill ${editing && techMatches(editing, t) ? "active" : ""}" data-tech="${escapeAttr(t)}">${escapeHtml(t)}</button>`).join("")}
+        </div>
 
         <label class="field-label" for="af-picture">Photo (optional)</label>
         <input type="text" id="af-picture" class="af-picture" placeholder="Paste a copied image or image link..." value="${editing ? escapeAttr(editing.picture || "") : ""}" />
@@ -586,6 +601,19 @@ function wireTaskForm() {
     if (!btn) return;
     categoryInput.value = btn.dataset.cat;
     pills.querySelectorAll(".pill").forEach((p) => p.classList.toggle("active", p === btn));
+  });
+
+  const techPills = document.getElementById("task-tech-pills");
+  const techInput = document.getElementById("af-technician");
+  techPills.addEventListener("click", (e) => {
+    const btn = e.target.closest(".pill");
+    if (!btn) return;
+    techInput.value = btn.dataset.tech;
+    techPills.querySelectorAll(".pill").forEach((p) => p.classList.toggle("active", p === btn));
+  });
+  techInput.addEventListener("input", () => {
+    techPills.querySelectorAll(".pill").forEach((p) =>
+      p.classList.toggle("active", p.dataset.tech.toLowerCase() === techInput.value.trim().toLowerCase()));
   });
 
   const linksContainer = document.getElementById("task-links-container");
@@ -645,7 +673,7 @@ function wireTaskForm() {
     const estimatedTime = document.getElementById("af-estimate").value.trim();
     const category = document.getElementById("af-category").value.trim();
     const reason = document.getElementById("af-reason").value.trim();
-    const checkFirst = document.getElementById("af-checkfirst").value.trim();
+    const technician = document.getElementById("af-technician").value.trim();
     const picture = document.getElementById("af-picture").value.trim();
 
     if (taskEditingId) {
@@ -656,7 +684,7 @@ function wireTaskForm() {
         item.estimatedTime = estimatedTime;
         item.category = category;
         item.reason = reason;
-        item.checkFirst = checkFirst;
+        item.technician = technician;
         item.picture = picture;
         item.links = links;
       }
@@ -670,7 +698,7 @@ function wireTaskForm() {
         estimatedTime,
         category,
         reason,
-        checkFirst,
+        technician,
         picture,
         links,
         done: false,
@@ -708,7 +736,7 @@ function taskItemCardHtml(item) {
         </div>
         <span class="badge ${item.done ? "badge-complete" : "badge-in-progress"}">${item.done ? "Done" : "Open"}</span>
       </div>
-      <div class="bench-item-meta">Added by ${escapeHtml(item.submitter || "Unknown")} &middot; ${escapeHtml(item.createdAt)}${item.estimatedTime ? ` &middot; Est. ${escapeHtml(item.estimatedTime)}` : ""}</div>
+      <div class="bench-item-meta">${taskTechFilter && projectNameFor(item.projectId) ? `<strong>${escapeHtml(projectNameFor(item.projectId))}</strong> &middot; ` : ""}Added by ${escapeHtml(item.submitter || "Unknown")} &middot; ${escapeHtml(item.createdAt)}${item.estimatedTime ? ` &middot; Est. ${escapeHtml(item.estimatedTime)}` : ""}${item.technician ? ` &middot; Tech: <strong>${escapeHtml(item.technician)}</strong>` : ""}</div>
       <div class="item-notes">${escapeHtml(item.reason)}</div>
       ${item.checkFirst ? `<p class="bench-before"><strong>Check first:</strong> ${escapeHtml(item.checkFirst)}</p>` : ""}
       ${item.picture ? `
@@ -819,12 +847,21 @@ function renderTasks() {
       <h1>Tasks</h1>
       <p class="view-sub">Things to check, measure or decide at the shop — nothing to buy.</p>
       <button type="button" id="task-open" class="bench-primary-btn">+ Add task</button>
+      <label class="field-label" for="task-tech-search">Find a technician's tasks (all projects)</label>
+      <input type="text" id="task-tech-search" placeholder="Type a name..." value="${escapeAttr(taskTechFilter)}" />
+      <div class="bench-pills" id="task-tech-filter">
+        <button type="button" class="pill ${taskTechFilter ? "" : "active"}" data-tech="">This project</button>
+        ${TECHNICIANS.map((t) => `<button type="button" class="pill ${taskTechFilter.toLowerCase() === t.toLowerCase() ? "active" : ""}" data-tech="${escapeAttr(t)}">${escapeHtml(t)}</button>`).join("")}
+      </div>
     `;
 
-  const projectTasks = taskItems.filter(inActiveProject).sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1));
+  const shown = taskTechFilter
+    ? taskItems.filter((i) => (i.technician || "").toLowerCase().includes(taskTechFilter.toLowerCase()))
+    : taskItems.filter(inActiveProject);
+  const projectTasks = shown.sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1));
   const list = projectTasks.length
-    ? `<div class="bench-item-list">${projectTasks.map(taskItemCardHtml).join("")}</div>`
-    : `<p class="view-sub">Nothing on the list right now.</p>`;
+    ? `${taskTechFilter ? `<p class="view-sub">Tasks assigned to ${escapeHtml(taskTechFilter)} across all projects &middot; ${projectTasks.filter((i) => !i.done).length} open</p>` : ""}<div class="bench-item-list">${projectTasks.map(taskItemCardHtml).join("")}</div>`
+    : `<p class="view-sub">${taskTechFilter ? `No tasks assigned to ${escapeHtml(taskTechFilter)}.` : "Nothing on the list right now."}</p>`;
 
   el.innerHTML = `${header}<div class="bench-list-wrap">${list}</div>`;
 
@@ -832,6 +869,17 @@ function renderTasks() {
     wireTaskForm();
   } else {
     document.getElementById("task-open").addEventListener("click", () => openTaskForm(null));
+    document.getElementById("task-tech-filter").addEventListener("click", (e) => {
+      const btn = e.target.closest(".pill");
+      if (!btn) return;
+      taskTechFilter = btn.dataset.tech;
+      renderTasks();
+    });
+    const search = document.getElementById("task-tech-search");
+    search.addEventListener("change", () => {
+      taskTechFilter = search.value.trim();
+      renderTasks();
+    });
   }
   wireTaskList();
 }
