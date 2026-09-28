@@ -481,7 +481,7 @@ function renderDashboard() {
     </div>
 
     <h2>Recent Log Entries</h2>
-    ${allProjectsLogEntries().slice(0, 3).map((e) => logEntryHtml(e, false, true)).join("") || `<p class="view-sub">No entries yet.</p>`}
+    ${allLogEntries().slice(0, 3).map(logEntryHtml).join("") || `<p class="view-sub">No entries yet.</p>`}
   `;
 
   document.querySelectorAll("#dashboard .card-link").forEach((card) => {
