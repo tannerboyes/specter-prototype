@@ -522,8 +522,29 @@ h2 {
   margin: 0 0 4px;
 }
 
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  margin-bottom: 0;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+
 #bench-form,
-#task-form {
+#task-form,
+#part-request-form {
   display: flex;
   flex-direction: column;
 }
@@ -550,7 +571,9 @@ h2 {
 #bench-form textarea,
 #task-form input[type="text"],
 #task-form input[type="url"],
-#task-form textarea {
+#task-form textarea,
+#part-request-form input[type="text"],
+#part-request-form textarea {
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -564,7 +587,9 @@ h2 {
 #bench-form input:focus,
 #bench-form textarea:focus,
 #task-form input:focus,
-#task-form textarea:focus {
+#task-form textarea:focus,
+#part-request-form input:focus,
+#part-request-form textarea:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
@@ -746,6 +771,17 @@ h2 {
 
 .bench-eyebrow-status.is-approved {
   color: var(--green);
+}
+
+.bench-eyebrow-status.is-bottleneck {
+  color: var(--yellow);
+}
+
+.bench-options-empty {
+  font-style: italic;
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 10px 0;
 }
 
 .bench-item-number {

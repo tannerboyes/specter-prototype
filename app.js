@@ -775,6 +775,7 @@ function taskItemCardHtml(item) {
         ${item.done
           ? `<button type="button" class="action-btn task-reopen-btn" data-item="${item.id}">${reopenIconHtml()} Reopen</button>`
           : `<button type="button" class="action-btn bench-approve-btn" data-item="${item.id}">${checkIconHtml()} Mark done</button>`}
+        ${!item.done ? `<button type="button" class="action-btn" data-request-part="${item.id}">${partRequestIconHtml()} Request part</button>` : ""}
         ${commentActionBtnHtml(item)}
         <button type="button" class="action-btn action-btn-danger bench-delete-item" data-item="${item.id}">${trashIconHtml()} Delete</button>
         ${assignSelectHtml(item)}
@@ -787,6 +788,10 @@ function taskItemCardHtml(item) {
 
 function wireTaskList() {
   wireComments("#tasks", taskItems, saveTaskItems, renderTasks);
+
+  document.querySelectorAll("#tasks [data-request-part]").forEach((btn) => {
+    btn.addEventListener("click", () => openPartRequestModal(btn.dataset.requestPart));
+  });
 
   document.querySelectorAll("#tasks .task-actual-time-input").forEach((input) => {
     input.addEventListener("change", () => {
@@ -912,6 +917,86 @@ function renderTasks() {
     });
   }
   wireTaskList();
+}
+
+/* ---------- Request a part (Task -> Bench) ---------- */
+/*
+ * Lets a technician flag a part they need mid-task without having to
+ * research vendors/links themselves. Creates a bare-bones bench item
+ * (no options yet, just what's needed and why) so the shop can add
+ * purchase options and approve one to order later.
+ */
+
+function partRequestModalHtml(task) {
+  return `
+    <div class="modal-overlay" id="part-request-overlay">
+      <div class="modal-card bench-form-panel">
+        <h2 class="bench-form-title">Request a part</h2>
+        <p class="view-sub">For "${escapeHtml(task.whatNeedsDoing)}" &mdash; sent to the Bench for the shop to find options and approve. No need to look anything up yourself.</p>
+        <form id="part-request-form">
+          <label class="field-label" for="pr-what">What part do you need</label>
+          <input type="text" id="pr-what" placeholder="e.g. M8 bolt, 40mm" required />
+
+          <label class="field-label" for="pr-why">Why / notes (optional)</label>
+          <textarea id="pr-why" rows="3" placeholder="Any details that'll help find the right one"></textarea>
+
+          <div class="bench-form-actions">
+            <button type="button" id="part-request-cancel" class="bench-secondary-btn">Cancel</button>
+            <button type="submit" class="bench-primary-btn">Send to Bench</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function closePartRequestModal() {
+  const overlay = document.getElementById("part-request-overlay");
+  if (overlay) overlay.remove();
+}
+
+function openPartRequestModal(taskId) {
+  const task = taskItems.find((i) => i.id === taskId);
+  if (!task) return;
+
+  document.body.insertAdjacentHTML("beforeend", partRequestModalHtml(task));
+  const overlay = document.getElementById("part-request-overlay");
+
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closePartRequestModal();
+  });
+  document.getElementById("part-request-cancel").addEventListener("click", closePartRequestModal);
+
+  document.getElementById("part-request-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const whatItIs = document.getElementById("pr-what").value.trim();
+    const why = document.getElementById("pr-why").value.trim();
+
+    benchItems.unshift({
+      id: "bench" + Date.now(),
+      projectId: task.projectId,
+      number: nextBenchNumber(),
+      createdAt: new Date().toISOString().slice(0, 10),
+      submitter: task.technician || task.submitter || "",
+      partName: whatItIs,
+      category: "",
+      reason: why || `Needed for task: "${task.whatNeedsDoing}"`,
+      beforeOrdering: "",
+      options: [],
+      status: "needs-decision",
+      approvedOptionId: null,
+      fromTaskId: task.id,
+    });
+    saveBenchItems();
+    addLogEntry(
+      "Part requested",
+      `"${whatItIs}" requested from the bench for "${task.whatNeedsDoing}"${task.technician ? " by " + task.technician : ""}.`
+    );
+    renderBench();
+    renderLog();
+    renderDashboard();
+    closePartRequestModal();
+  });
 }
 
 /* ---------- Build Log ---------- */
@@ -1219,6 +1304,10 @@ function trashIconHtml() {
   return `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 4.2h11M6.2 4.2V2.4a.6.6 0 0 1 .6-.6h2.4a.6.6 0 0 1 .6.6v1.8M3.6 4.2l.6 8.9c.04.6.53 1 1.1 1h5.4c.57 0 1.06-.4 1.1-1l.6-8.9M6.6 7v4.2M9.4 7v4.2"/></svg>`;
 }
 
+function partRequestIconHtml() {
+  return `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.8 8 2l6 2.8v6.4L8 14l-6-2.8V4.8Z"/><path d="M2 4.8 8 7.6l6-2.8"/><path d="M8 7.6V14"/></svg>`;
+}
+
 /* ---- More-links parsing: one per line, "Name | https://..." or a bare URL ---- */
 
 function parseMoreLinks(text) {
@@ -1523,13 +1612,16 @@ function benchOptionCardHtml(item, opt) {
 }
 
 function benchItemCardHtml(item) {
-  const statusLabel = item.status === "approved" ? "APPROVED" : "OPEN &mdash; DECISION NEEDED";
+  const isBottleneck = item.status !== "approved" && item.options.length === 0;
+  const statusLabel = item.status === "approved" ? "APPROVED" : isBottleneck ? "BOTTLENECK &mdash; NEEDS OPTIONS" : "OPEN &mdash; DECISION NEEDED";
+  const statusClass = item.status === "approved" ? "is-approved" : isBottleneck ? "is-bottleneck" : "is-open";
+  const fromTask = item.fromTaskId ? taskItems.find((t) => t.id === item.fromTaskId) : null;
   return `
     <div class="bench-item-card">
       <div class="bench-eyebrow">
         <span>${escapeHtml((item.category || "Uncategorized").toUpperCase())}</span>
         <span class="bench-eyebrow-sep">&middot;</span>
-        <span class="bench-eyebrow-status ${item.status === "approved" ? "is-approved" : "is-open"}">${statusLabel}</span>
+        <span class="bench-eyebrow-status ${statusClass}">${statusLabel}</span>
         <span class="bench-item-number">${String(item.number || 0).padStart(2, "0")}</span>
       </div>
 
@@ -1537,7 +1629,7 @@ function benchItemCardHtml(item) {
         <h3 class="bench-item-title">${escapeHtml(item.partName)}</h3>
       </div>
 
-      <div class="bench-item-meta">Submitted by ${escapeHtml(item.submitter || "Unknown")} &middot; ${escapeHtml(item.createdAt)}</div>
+      <div class="bench-item-meta">Submitted by ${escapeHtml(item.submitter || "Unknown")} &middot; ${escapeHtml(item.createdAt)}${fromTask ? ` &middot; Requested from task: <strong>${escapeHtml(fromTask.whatNeedsDoing)}</strong>` : ""}</div>
 
       ${expandableHtml(item.reason)}
 
@@ -1546,7 +1638,9 @@ function benchItemCardHtml(item) {
       ` : ""}
 
       <div class="bench-options-list">
-        ${item.options.map((opt) => benchOptionCardHtml(item, opt)).join("")}
+        ${item.options.length
+          ? item.options.map((opt) => benchOptionCardHtml(item, opt)).join("")
+          : `<p class="bench-options-empty">No purchase options yet — click Edit to add vendor options.</p>`}
       </div>
 
       <div class="item-actions-bar">
