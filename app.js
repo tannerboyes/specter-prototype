@@ -420,10 +420,14 @@ function renderProjectSelector() {
     } else {
       // Positioned via fixed + JS (not CSS absolute) so the sidebar's own
       // overflow-y:auto can't clip the menu and hide options at the bottom.
+      // Wider than the trigger itself — three icons per row leaves little
+      // room for the project name at the sidebar's own width — but clamped
+      // so it never runs past the right edge of the viewport.
       const rect = trigger.getBoundingClientRect();
+      const width = Math.min(Math.max(rect.width, 280), window.innerWidth - rect.left - 16);
       menu.style.top = `${rect.bottom + 4}px`;
       menu.style.left = `${rect.left}px`;
-      menu.style.width = `${rect.width}px`;
+      menu.style.width = `${width}px`;
       menu.style.maxHeight = `${Math.min(260, window.innerHeight - rect.bottom - 16)}px`;
       menu.hidden = false;
       trigger.setAttribute("aria-expanded", "true");
