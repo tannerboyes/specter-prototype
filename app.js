@@ -897,7 +897,7 @@ function renderTasks() {
       <p class="view-sub">Things to check, measure or decide at the shop — nothing to buy.</p>
       <button type="button" id="task-open" class="bench-primary-btn">+ Add task</button>
       <label class="field-label" for="task-tech-search">Find a technician's tasks (all projects)</label>
-      <input type="text" id="task-tech-search" placeholder="Type a name..." value="${taskTechFilter === UNASSIGNED ? "" : escapeAttr(taskTechFilter)}" />
+      <input type="text" id="task-tech-search" placeholder="Type a name..." value="${taskTechFilter === UNASSIGNED || taskTechFilter === URGENT_FILTER ? "" : escapeAttr(taskTechFilter)}" />
       <div class="bench-pills" id="task-tech-filter">
         <button type="button" class="pill ${taskTechFilter ? "" : "active"}" data-tech="">This project</button>
         ${TECHNICIANS.map((t) => `<button type="button" class="pill ${taskTechFilter.toLowerCase() === t.toLowerCase() ? "active" : ""}" data-tech="${escapeAttr(t)}">${escapeHtml(t)}</button>`).join("")}
