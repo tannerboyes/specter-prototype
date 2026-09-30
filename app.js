@@ -505,6 +505,7 @@ let taskLinkCounter = 0;
 let taskEditingId = null;
 let taskTechFilter = "";
 const UNASSIGNED = "__unassigned__";
+const URGENT_FILTER = "__urgent__";
 
 // Quick "Assign to…" dropdown on each open task card, so techs can be
 // assigned without opening the edit form or switching projects.
@@ -720,6 +721,7 @@ function wireTaskForm() {
         done: false,
         doneAt: null,
         actualTime: "",
+        urgent: false,
       });
     }
 
@@ -744,13 +746,16 @@ function closeTaskForm() {
 
 function taskItemCardHtml(item) {
   return `
-    <div class="bench-item-card ${item.done ? "is-done" : ""}">
+    <div class="bench-item-card ${item.done ? "is-done" : ""} ${item.urgent ? "is-urgent" : ""}">
       <div class="item-head">
         <div class="item-name">
           ${escapeHtml(item.whatNeedsDoing)}
           ${item.category ? `<span class="item-cat">${escapeHtml(item.category)}</span>` : ""}
         </div>
-        <span class="badge ${item.done ? "badge-complete" : "badge-in-progress"}">${item.done ? "Done" : "Open"}</span>
+        <div class="item-head-badges">
+          ${item.urgent ? `<span class="badge badge-urgent">Urgent</span>` : ""}
+          <span class="badge ${item.done ? "badge-complete" : "badge-in-progress"}">${item.done ? "Done" : "Open"}</span>
+        </div>
       </div>
       <div class="bench-item-meta">${taskTechFilter && projectNameFor(item.projectId) ? `<strong>${escapeHtml(projectNameFor(item.projectId))}</strong> &middot; ` : ""}Added by ${escapeHtml(item.submitter || "Unknown")} &middot; ${escapeHtml(item.createdAt)}${item.estimatedTime ? ` &middot; Est. ${escapeHtml(item.estimatedTime)}` : ""}${item.technician ? ` &middot; Tech: <strong>${escapeHtml(item.technician)}</strong>` : ""}</div>
       <div class="item-notes">${escapeHtml(item.reason)}</div>
@@ -776,6 +781,7 @@ function taskItemCardHtml(item) {
           ? `<button type="button" class="action-btn task-reopen-btn" data-item="${item.id}">${reopenIconHtml()} Reopen</button>`
           : `<button type="button" class="action-btn bench-approve-btn" data-item="${item.id}">${checkIconHtml()} Mark done</button>`}
         ${!item.done ? `<button type="button" class="action-btn" data-request-part="${item.id}">${partRequestIconHtml()} Request part</button>` : ""}
+        <button type="button" class="action-btn" data-toggle-urgent="${item.id}">${urgentIconHtml()} ${item.urgent ? "Unmark urgent" : "Mark urgent"}</button>
         ${commentActionBtnHtml(item)}
         <button type="button" class="action-btn action-btn-danger bench-delete-item" data-item="${item.id}">${trashIconHtml()} Delete</button>
         ${assignSelectHtml(item)}
@@ -791,6 +797,17 @@ function wireTaskList() {
 
   document.querySelectorAll("#tasks [data-request-part]").forEach((btn) => {
     btn.addEventListener("click", () => openPartRequestModal(btn.dataset.requestPart));
+  });
+
+  document.querySelectorAll("#tasks [data-toggle-urgent]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = taskItems.find((i) => i.id === btn.dataset.toggleUrgent);
+      if (!item) return;
+      item.urgent = !item.urgent;
+      saveTaskItems();
+      renderTasks();
+      renderDashboard();
+    });
   });
 
   document.querySelectorAll("#tasks .task-actual-time-input").forEach((input) => {
@@ -885,18 +902,25 @@ function renderTasks() {
         <button type="button" class="pill ${taskTechFilter ? "" : "active"}" data-tech="">This project</button>
         ${TECHNICIANS.map((t) => `<button type="button" class="pill ${taskTechFilter.toLowerCase() === t.toLowerCase() ? "active" : ""}" data-tech="${escapeAttr(t)}">${escapeHtml(t)}</button>`).join("")}
         <button type="button" class="pill ${taskTechFilter === UNASSIGNED ? "active" : ""}" data-tech="${UNASSIGNED}">Unassigned</button>
+        <button type="button" class="pill ${taskTechFilter === URGENT_FILTER ? "active" : ""}" data-tech="${URGENT_FILTER}">Urgent</button>
       </div>
     `;
 
   const shown = taskTechFilter === UNASSIGNED
     ? taskItems.filter((i) => !i.done && !(i.technician || "").trim())
+    : taskTechFilter === URGENT_FILTER
+    ? taskItems.filter((i) => !i.done && i.urgent)
     : taskTechFilter
     ? taskItems.filter((i) => (i.technician || "").toLowerCase().includes(taskTechFilter.toLowerCase()))
     : taskItems.filter(inActiveProject);
-  const projectTasks = shown.sort((a, b) => (a.done === b.done ? 0 : a.done ? 1 : -1));
+  const projectTasks = shown.sort((a, b) => {
+    if (a.done !== b.done) return a.done ? 1 : -1;
+    if (!!a.urgent !== !!b.urgent) return a.urgent ? -1 : 1;
+    return 0;
+  });
   const list = projectTasks.length
-    ? `${taskTechFilter === UNASSIGNED ? `<p class="view-sub">${projectTasks.length} open task${projectTasks.length === 1 ? "" : "s"} with no technician, across all projects</p>` : taskTechFilter ? `<p class="view-sub">Tasks assigned to ${escapeHtml(taskTechFilter)} across all projects &middot; ${projectTasks.filter((i) => !i.done).length} open</p>` : ""}<div class="bench-item-list">${projectTasks.map(taskItemCardHtml).join("")}</div>`
-    : `<p class="view-sub">${taskTechFilter === UNASSIGNED ? "Every open task has a technician." : taskTechFilter ? `No tasks assigned to ${escapeHtml(taskTechFilter)}.` : "Nothing on the list right now."}</p>`;
+    ? `${taskTechFilter === UNASSIGNED ? `<p class="view-sub">${projectTasks.length} open task${projectTasks.length === 1 ? "" : "s"} with no technician, across all projects</p>` : taskTechFilter === URGENT_FILTER ? `<p class="view-sub">${projectTasks.length} urgent open task${projectTasks.length === 1 ? "" : "s"}, across all projects</p>` : taskTechFilter ? `<p class="view-sub">Tasks assigned to ${escapeHtml(taskTechFilter)} across all projects &middot; ${projectTasks.filter((i) => !i.done).length} open</p>` : ""}<div class="bench-item-list">${projectTasks.map(taskItemCardHtml).join("")}</div>`
+    : `<p class="view-sub">${taskTechFilter === UNASSIGNED ? "Every open task has a technician." : taskTechFilter === URGENT_FILTER ? "No urgent tasks right now." : taskTechFilter ? `No tasks assigned to ${escapeHtml(taskTechFilter)}.` : "Nothing on the list right now."}</p>`;
 
   el.innerHTML = `${header}<div class="bench-list-wrap">${list}</div>`;
 
@@ -986,6 +1010,7 @@ function openPartRequestModal(taskId) {
       status: "needs-decision",
       approvedOptionId: null,
       fromTaskId: task.id,
+      urgent: !!task.urgent,
     });
     saveBenchItems();
     addLogEntry(
@@ -1308,6 +1333,10 @@ function partRequestIconHtml() {
   return `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4.8 8 2l6 2.8v6.4L8 14l-6-2.8V4.8Z"/><path d="M2 4.8 8 7.6l6-2.8"/><path d="M8 7.6V14"/></svg>`;
 }
 
+function urgentIconHtml() {
+  return `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1.6 14.6 13.4H1.4L8 1.6Z"/><path d="M8 6.2v3"/><circle cx="8" cy="11.3" r="0.8" fill="currentColor" stroke="none"/></svg>`;
+}
+
 /* ---- More-links parsing: one per line, "Name | https://..." or a bare URL ---- */
 
 function parseMoreLinks(text) {
@@ -1541,6 +1570,7 @@ function wireBenchForm() {
         options,
         status: "needs-decision",
         approvedOptionId: null,
+        urgent: false,
       });
     }
 
@@ -1617,7 +1647,7 @@ function benchItemCardHtml(item) {
   const statusClass = item.status === "approved" ? "is-approved" : isBottleneck ? "is-bottleneck" : "is-open";
   const fromTask = item.fromTaskId ? taskItems.find((t) => t.id === item.fromTaskId) : null;
   return `
-    <div class="bench-item-card">
+    <div class="bench-item-card ${item.urgent ? "is-urgent" : ""}">
       <div class="bench-eyebrow">
         <span>${escapeHtml((item.category || "Uncategorized").toUpperCase())}</span>
         <span class="bench-eyebrow-sep">&middot;</span>
@@ -1627,6 +1657,7 @@ function benchItemCardHtml(item) {
 
       <div class="bench-title-row">
         <h3 class="bench-item-title">${escapeHtml(item.partName)}</h3>
+        ${item.urgent ? `<span class="badge badge-urgent">Urgent</span>` : ""}
       </div>
 
       <div class="bench-item-meta">Submitted by ${escapeHtml(item.submitter || "Unknown")} &middot; ${escapeHtml(item.createdAt)}${fromTask ? ` &middot; Requested from task: <strong>${escapeHtml(fromTask.whatNeedsDoing)}</strong>` : ""}</div>
@@ -1646,6 +1677,7 @@ function benchItemCardHtml(item) {
       <div class="item-actions-bar">
         <button type="button" class="action-btn" data-edit-item="${item.id}">${pencilIconHtml()} Edit</button>
         ${item.status === "approved" ? `<button type="button" class="action-btn bench-reopen-btn" data-item="${item.id}">${reopenIconHtml()} Reopen decision</button>` : ""}
+        <button type="button" class="action-btn" data-toggle-urgent="${item.id}">${urgentIconHtml()} ${item.urgent ? "Unmark urgent" : "Mark urgent"}</button>
         ${commentActionBtnHtml(item)}
         <button type="button" class="action-btn action-btn-danger bench-delete-item" data-item="${item.id}">${trashIconHtml()} Delete</button>
         ${moveSelectHtml(item)}
@@ -1657,6 +1689,17 @@ function benchItemCardHtml(item) {
 
 function wireBenchList() {
   wireComments("#bench", benchItems, saveBenchItems, renderBench);
+
+  document.querySelectorAll("#bench [data-toggle-urgent]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const item = benchItems.find((i) => i.id === btn.dataset.toggleUrgent);
+      if (!item) return;
+      item.urgent = !item.urgent;
+      saveBenchItems();
+      renderBench();
+      renderDashboard();
+    });
+  });
 
   document.querySelectorAll("#bench .move-project-select").forEach((select) => {
     select.addEventListener("change", () => {
@@ -1734,7 +1777,7 @@ function renderBench() {
       <button type="button" id="bench-open" class="bench-primary-btn">+ Add an item to the bench</button>
     `;
 
-  const projectBenchItems = benchItems.filter(inActiveProject);
+  const projectBenchItems = benchItems.filter(inActiveProject).sort((a, b) => (!!a.urgent === !!b.urgent ? 0 : a.urgent ? -1 : 1));
   const list = projectBenchItems.length
     ? `<div class="bench-item-list">${projectBenchItems.map(benchItemCardHtml).join("")}</div>`
     : `<p class="view-sub">Nothing on the bench right now.</p>`;

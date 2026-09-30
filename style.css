@@ -442,6 +442,13 @@ h2 {
   margin-bottom: 6px;
 }
 
+.item-head-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .item-name {
   font-weight: 600;
   font-size: 14px;
@@ -736,6 +743,10 @@ h2 {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 16px 18px;
+}
+
+.bench-item-card.is-urgent {
+  border-left: 3px solid var(--red);
 }
 
 .bench-item-card.is-done {
@@ -1210,6 +1221,7 @@ h2 {
 .badge-in-progress { background: var(--accent-dim); color: var(--btn-bg); }
 .badge-blocked { background: var(--red-bg); color: var(--red); }
 .badge-complete { background: var(--green-bg); color: var(--green); }
+.badge-urgent { background: var(--red-bg); color: var(--red); }
 
 /* ---------- Log ---------- */
 
