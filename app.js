@@ -233,10 +233,15 @@ function inActiveProject(item) {
   return item.projectId === activeProjectId;
 }
 
+function isArchivedProject(projectId) {
+  const p = projects.find((x) => x.id === projectId);
+  return !!(p && p.archived);
+}
+
 // A plain <select> for moving a miscategorized task/bench item to a
 // different project. Omitted entirely when there's nowhere else to move it.
 function moveSelectHtml(item) {
-  const others = projects.filter((p) => p.id !== item.projectId);
+  const others = projects.filter((p) => p.id !== item.projectId && !p.archived);
   if (others.length === 0) return "";
   return `
     <select class="move-project-select" data-item="${escapeAttr(item.id)}" aria-label="Move to another project">
@@ -252,6 +257,7 @@ function renderAll() {
   renderBench();
   renderShipments();
   renderLog();
+  renderArchive();
 }
 
 function switchProject(id) {
@@ -328,6 +334,43 @@ function deleteProject(id) {
   renderProjectSelector();
 }
 
+// Archiving hides a finished project from the picker and cross-project
+// views without touching any of its tasks/bench items/shipments/log —
+// unlike delete, nothing is lost.
+function archiveProject(id) {
+  const project = projects.find((p) => p.id === id);
+  if (!project) return;
+  const active = projects.filter((p) => !p.archived);
+  if (active.length <= 1) {
+    alert("You need at least one active project — add another before archiving this one.");
+    return;
+  }
+  if (!confirm(`Archive "${project.name}"? You can restore it anytime from the Archive tab.`)) return;
+
+  project.archived = true;
+  saveProjects();
+
+  if (activeProjectId === id) {
+    const next = projects.find((p) => !p.archived);
+    if (next) setActiveProjectId(next.id);
+  }
+  taskFormOpen = false;
+  taskEditingId = null;
+  benchFormOpen = false;
+  benchEditingId = null;
+  renderAll();
+  renderProjectSelector();
+}
+
+function unarchiveProject(id) {
+  const project = projects.find((p) => p.id === id);
+  if (!project) return;
+  project.archived = false;
+  saveProjects();
+  renderAll();
+  renderProjectSelector();
+}
+
 function closeProjectMenu() {
   const menu = document.getElementById("project-picker-menu");
   const trigger = document.getElementById("project-picker-trigger");
@@ -341,11 +384,13 @@ function renderProjectSelector() {
   const activeProject = projects.find((p) => p.id === activeProjectId);
 
   const rows = projects
+    .filter((p) => !p.archived)
     .map((p) => `
       <div class="project-picker-row ${p.id === activeProjectId ? "is-active" : ""}">
         <button type="button" class="project-picker-name" data-select="${escapeAttr(p.id)}">${escapeHtml(p.name)}</button>
         <div class="project-picker-row-actions">
           <button type="button" class="project-picker-icon-btn" data-rename="${escapeAttr(p.id)}" aria-label="Rename project" title="Rename project">${pencilIconHtml()}</button>
+          <button type="button" class="project-picker-icon-btn" data-archive="${escapeAttr(p.id)}" aria-label="Archive project" title="Archive project">${archiveIconHtml()}</button>
           <button type="button" class="project-picker-icon-btn project-picker-icon-btn-danger" data-delete="${escapeAttr(p.id)}" aria-label="Delete project" title="Delete project">${trashIconHtml()}</button>
         </div>
       </div>
@@ -388,12 +433,19 @@ function renderProjectSelector() {
   menu.addEventListener("click", (e) => {
     const selectBtn = e.target.closest("[data-select]");
     const renameBtn = e.target.closest("[data-rename]");
+    const archiveBtn = e.target.closest("[data-archive]");
     const deleteBtn = e.target.closest("[data-delete]");
     const addBtn = e.target.closest("[data-add]");
 
     if (renameBtn) {
       e.stopPropagation();
       renameProject(renameBtn.dataset.rename);
+      return;
+    }
+    if (archiveBtn) {
+      e.stopPropagation();
+      closeProjectMenu();
+      archiveProject(archiveBtn.dataset.archive);
       return;
     }
     if (deleteBtn) {
@@ -907,11 +959,11 @@ function renderTasks() {
     `;
 
   const shown = taskTechFilter === UNASSIGNED
-    ? taskItems.filter((i) => !i.done && !(i.technician || "").trim())
+    ? taskItems.filter((i) => !i.done && !(i.technician || "").trim() && !isArchivedProject(i.projectId))
     : taskTechFilter === URGENT_FILTER
-    ? taskItems.filter((i) => !i.done && i.urgent)
+    ? taskItems.filter((i) => !i.done && i.urgent && !isArchivedProject(i.projectId))
     : taskTechFilter
-    ? taskItems.filter((i) => (i.technician || "").toLowerCase().includes(taskTechFilter.toLowerCase()))
+    ? taskItems.filter((i) => (i.technician || "").toLowerCase().includes(taskTechFilter.toLowerCase()) && !isArchivedProject(i.projectId))
     : taskItems.filter(inActiveProject);
   const projectTasks = shown.sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
@@ -1060,10 +1112,13 @@ function allLogEntries() {
   return [...activityLog.filter(inActiveProject), ...staticEntries].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
-// Build Log tab: every project's entries in one timeline, newest first.
+// Build Log tab: every project's entries in one timeline, newest first —
+// archived projects' entries stay out so they don't crowd the log.
 function allProjectsLogEntries() {
   const staticEntries = DATA.log.map((e) => ({ ...e, projectId: e.projectId || DEFAULT_PROJECT_ID }));
-  return [...activityLog, ...staticEntries].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return [...activityLog, ...staticEntries]
+    .filter((e) => !isArchivedProject(e.projectId))
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 }
 
 function logEntryHtml(entry, deletable, showProject) {
@@ -1097,6 +1152,40 @@ function renderLog() {
     ${allProjectsLogEntries().map((e) => logEntryHtml(e, true, true)).join("") || `<p class="view-sub">No entries yet.</p>`}
   `;
   wireLogList();
+}
+
+/* ---------- Archive ---------- */
+
+function archivedProjectRowHtml(p) {
+  const itemCount =
+    taskItems.filter((i) => i.projectId === p.id).length +
+    benchItems.filter((i) => i.projectId === p.id).length +
+    shipments.filter((i) => i.projectId === p.id).length;
+  return `
+    <div class="bench-item-card">
+      <div class="bench-title-row">
+        <h3 class="bench-item-title">${escapeHtml(p.name)}</h3>
+        <button type="button" class="bench-secondary-btn" data-unarchive="${escapeAttr(p.id)}">Restore</button>
+      </div>
+      <p class="view-sub">Created ${escapeHtml(p.createdAt || "")} &middot; ${itemCount} item${itemCount === 1 ? "" : "s"}</p>
+    </div>
+  `;
+}
+
+function renderArchive() {
+  const el = document.getElementById("archive");
+  if (!el) return;
+  const archived = projects.filter((p) => p.archived);
+  el.innerHTML = `
+    <h1>Archive</h1>
+    <p class="view-sub">Finished projects, tucked away but never deleted. Restore one anytime.</p>
+    ${archived.length
+      ? `<div class="bench-item-list">${archived.map(archivedProjectRowHtml).join("")}</div>`
+      : `<p class="view-sub">No archived projects yet.</p>`}
+  `;
+  el.querySelectorAll("[data-unarchive]").forEach((btn) => {
+    btn.addEventListener("click", () => unarchiveProject(btn.dataset.unarchive));
+  });
 }
 
 /* ---------- Bench ---------- */
@@ -1165,6 +1254,10 @@ function reopenIconHtml() {
 
 function commentIconHtml() {
   return `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3.3h12v7.4H6.3L3 13.3v-2.6H2z"/></svg>`;
+}
+
+function archiveIconHtml() {
+  return `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="3" rx="0.6"/><path d="M3 5.5v7.2a0.8 0.8 0 0 0 0.8 0.8h8.4a0.8 0.8 0 0 0 0.8-0.8V5.5"/><path d="M6.3 8.3h3.4"/></svg>`;
 }
 
 /* ---------- Comments (shared by Tasks & Bench items) ---------- */
