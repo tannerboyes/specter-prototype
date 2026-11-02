@@ -578,7 +578,7 @@ function assignSelectHtml(item) {
   `;
 }
 
-const TECHNICIANS = ["Tanner", "Angel", "Skyler", "Jason"];
+const TECHNICIANS = ["Tanner", "Angel", "Skyler", "Jason", "Jonathan"];
 
 function techMatches(item, name) {
   return (item.technician || "").trim().toLowerCase() === name.trim().toLowerCase();
