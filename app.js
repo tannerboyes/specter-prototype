@@ -976,6 +976,16 @@ function wireTaskList() {
   });
 }
 
+// Items are created with an id like "task" + Date.now(), so the trailing
+// digits double as a creation timestamp. Used to keep newest-first order
+// stable across a refresh, since a fresh fetch from Supabase has no
+// guaranteed row order of its own.
+function itemTimestamp(item) {
+  const match = /(\d{9,})$/.exec((item && item.id) || "");
+  if (match) return Number(match[1]);
+  return item && item.createdAt ? Date.parse(item.createdAt) || 0 : 0;
+}
+
 function renderTasks() {
   const el = document.getElementById("tasks");
 
@@ -1005,7 +1015,7 @@ function renderTasks() {
   const projectTasks = shown.sort((a, b) => {
     if (a.done !== b.done) return a.done ? 1 : -1;
     if (!!a.urgent !== !!b.urgent) return a.urgent ? -1 : 1;
-    return 0;
+    return itemTimestamp(b) - itemTimestamp(a);
   });
   const list = projectTasks.length
     ? `${taskTechFilter === UNASSIGNED ? `<p class="view-sub">${projectTasks.length} open task${projectTasks.length === 1 ? "" : "s"} with no technician, across all projects</p>` : taskTechFilter === URGENT_FILTER ? `<p class="view-sub">${projectTasks.length} urgent open task${projectTasks.length === 1 ? "" : "s"}, across all projects</p>` : taskTechFilter ? `<p class="view-sub">Tasks assigned to ${escapeHtml(taskTechFilter)} across all projects &middot; ${projectTasks.filter((i) => !i.done).length} open</p>` : ""}<div class="bench-item-list">${projectTasks.map(taskItemCardHtml).join("")}</div>`
