@@ -69,6 +69,19 @@ async function supabaseSyncTable(table, items) {
   }
 }
 
+// Combines a freshly-fetched remote table with whatever this browser has
+// locally. A plain "remote wins" replace is unsafe: if this browser just
+// added/edited something and its own save (POST) hasn't landed yet — or
+// briefly failed — by the time this fetch resolves, the remote list won't
+// have it yet, and overwriting local state with it would silently throw the
+// new item away (it looks like it "vanishes on refresh"). Any local item
+// missing from the remote list is kept and re-queued to sync.
+function mergeRemoteWithUnsyncedLocal(remoteItems, localItems) {
+  const remoteIds = new Set(remoteItems.map((it) => it && it.id));
+  const localOnly = localItems.filter((it) => it && it.id && !remoteIds.has(it.id));
+  return { merged: [...remoteItems, ...localOnly], hadLocalOnly: localOnly.length > 0 };
+}
+
 async function bootstrapFromSupabase() {
   try {
     // Promise.allSettled, not Promise.all: one missing/broken table (e.g. a
@@ -90,7 +103,11 @@ async function bootstrapFromSupabase() {
       const tasks = tasksResult.value;
       rememberSynced("tasks", tasks);
       if (tasks.length === 0 && taskItems.length > 0) supabaseSyncTable("tasks", taskItems);
-      else taskItems = tasks;
+      else {
+        const { merged, hadLocalOnly } = mergeRemoteWithUnsyncedLocal(tasks, taskItems);
+        taskItems = merged;
+        if (hadLocalOnly) supabaseSyncTable("tasks", taskItems);
+      }
     } else {
       console.warn("Supabase fetch failed for tasks, keeping local data", tasksResult.reason);
     }
@@ -99,7 +116,11 @@ async function bootstrapFromSupabase() {
       const bench = benchResult.value;
       rememberSynced("bench_items", bench);
       if (bench.length === 0 && benchItems.length > 0) supabaseSyncTable("bench_items", benchItems);
-      else benchItems = bench;
+      else {
+        const { merged, hadLocalOnly } = mergeRemoteWithUnsyncedLocal(bench, benchItems);
+        benchItems = merged;
+        if (hadLocalOnly) supabaseSyncTable("bench_items", benchItems);
+      }
     } else {
       console.warn("Supabase fetch failed for bench_items, keeping local data", benchResult.reason);
     }
@@ -108,7 +129,11 @@ async function bootstrapFromSupabase() {
       const ships = shipsResult.value;
       rememberSynced("shipments", ships);
       if (ships.length === 0 && shipments.length > 0) supabaseSyncTable("shipments", shipments);
-      else shipments = ships;
+      else {
+        const { merged, hadLocalOnly } = mergeRemoteWithUnsyncedLocal(ships, shipments);
+        shipments = merged;
+        if (hadLocalOnly) supabaseSyncTable("shipments", shipments);
+      }
     } else {
       console.warn("Supabase fetch failed for shipments, keeping local data", shipsResult.reason);
     }
@@ -117,7 +142,11 @@ async function bootstrapFromSupabase() {
       const log = logResult.value;
       rememberSynced("activity_log", log);
       if (log.length === 0 && activityLog.length > 0) supabaseSyncTable("activity_log", activityLog);
-      else activityLog = log;
+      else {
+        const { merged, hadLocalOnly } = mergeRemoteWithUnsyncedLocal(log, activityLog);
+        activityLog = merged;
+        if (hadLocalOnly) supabaseSyncTable("activity_log", activityLog);
+      }
     } else {
       console.warn("Supabase fetch failed for activity_log, keeping local data", logResult.reason);
     }
@@ -126,7 +155,11 @@ async function bootstrapFromSupabase() {
       const projs = projsResult.value;
       rememberSynced("projects", projs);
       if (projs.length === 0 && projects.length > 0) supabaseSyncTable("projects", projects);
-      else projects = projs;
+      else {
+        const { merged, hadLocalOnly } = mergeRemoteWithUnsyncedLocal(projs, projects);
+        projects = merged;
+        if (hadLocalOnly) supabaseSyncTable("projects", projects);
+      }
     } else {
       console.warn("Supabase fetch failed for projects, keeping local data", projsResult.reason);
     }
